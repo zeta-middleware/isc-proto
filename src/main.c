@@ -28,20 +28,17 @@ struct zt_isc_header {
 void main(void)
 {
     if (uart_open("UART_0")) {
-        printk("Could not configure UART\n");
+        return;
     }
-    printk("Board: %s\n", CONFIG_BOARD);
-    uint8_t buffer[]       = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    uint8_t buffer[]       = {10, 111, 2, 3, 4, 5, 6, 7, 8, 9};
     struct zt_isc_header h = {0};
-    h.type                 = 0;
-    h.cmd                  = 0;
-    h.channel              = 5;
-    h.crc                  = crc8(buffer, sizeof(buffer), 0xFF, buffer[0], 0);
+    h.type                 = 3;
+    h.cmd                  = 8;
+    h.channel              = 2;
+    h.crc                  = crc8(buffer, sizeof(buffer), 0x07, 0x00, 0);
 
     uart_write((uint8_t *) &h, sizeof(struct zt_isc_header));
     uart_write(buffer, sizeof(buffer));
-    char c = 't';
-    uart_write_byte(&c);
     char data = 0;
     while (1) {
         if (!k_msgq_get(uart_get_input_msgq(), &data, K_FOREVER)) {

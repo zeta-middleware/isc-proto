@@ -8,6 +8,8 @@ int uart_open(char *dev_label);
 
 int uart_write(uint8_t *data, size_t size);
 
+int uart_write_str(char *str);
+
 int uart_write_byte(uint8_t *byte);
 
 struct k_msgq *uart_get_input_msgq();

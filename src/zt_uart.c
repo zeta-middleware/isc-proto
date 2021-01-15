@@ -85,6 +85,22 @@ int uart_write(uint8_t *data, size_t size)
     return err;
 }
 
+int uart_write_str(char *str)
+{
+    if (__uart_dev == NULL) {
+        return -ENODEV;
+    }
+    int err         = 0;
+    char *data_iter = str;
+    for (; *data_iter != '\0'; ++data_iter) {
+        err = err || k_msgq_put(&__output_msgq, data_iter, K_MSEC(10));
+    }
+
+    uart_irq_tx_enable(__uart_dev);
+
+    return err;
+}
+
 int uart_write_byte(uint8_t *byte)
 {
     if (__uart_dev == NULL) {
