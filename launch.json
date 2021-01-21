@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [{
+        "name": "Zephyr nRF52840",
+        "executable": "/home/rodrigopex/Cloud/Projects/zephyrproject/isc-proto/build/zephyr/zephyr.elf",
+        "request": "attach",
+        "type": "gdbserver",
+        "target": ":2331",
+        "remote": true,
+        "stopOnEntry": true,
+        "gdbpath": "/home/rodrigopex/.local/zephyr-sdk-0.12.0/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb",
+        "customLaunchSetupCommands": [{
+            "text": "load \"$executable\"",
+            "description": "Load file target",
+            "ignoreFailures": false
+        }, {
+            "text": "file \"$executable\"",
+            "description": "Load file target",
+            "ignoreFailures": false
+        }]
+    }]
+}

@@ -23,6 +23,7 @@ struct zt_isc_header {
     uint8_t cmd : 6;     /**!> 0: pub, 1: read, 2..: reserved */
     uint8_t channel : 8; /**!> 256 channels available*/
     uint8_t crc : 8;     /**!> CCITT 8 */
+    uint8_t size : 8;    /**!> data size */
 };
 
 void main(void)
@@ -36,6 +37,7 @@ void main(void)
     h.cmd                  = 8;
     h.channel              = 2;
     h.crc                  = crc8(buffer, sizeof(buffer), 0x07, 0x00, 0);
+    h.size                 = sizeof(buffer);
 
     uart_write((uint8_t *) &h, sizeof(struct zt_isc_header));
     uart_write(buffer, sizeof(buffer));

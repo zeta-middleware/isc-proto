@@ -6,13 +6,14 @@ from libscrc import crc8
 
 class ZetaISCCommand:
     def __init__(self, *args):
-        if len(args) != 4:
+        if len(args) != 5:
             raise ValueError("Arg must have 4 items given {}".format(
                 len(args)))
         self.__type = args[1]
         self.__cmd = args[0]
         self.__channel = args[2]
         self.__crc = args[3]
+        self.__size = args[4]
         self.__data = None
 
     def __repr__(self):
@@ -21,20 +22,21 @@ class ZetaISCCommand:
              f"    cmd: {self.__cmd}\n" + \
              f"    channel {self.__channel}\n" + \
              f"    crc: {self.__crc}\n" + \
+             f"    size: {self.__size}\n" + \
              f"    data: {self.__data}\n)"
         return representation
 
     def size(self):
-        if self.__channel == 2:
-            return 10
-        else:
-            return 0
+        return self.__size
 
     def crc8(self):
         return self.__crc
 
     def set_data(self, data):
         self.__data = data
+
+    def data(self):
+        return self.__data
 
 
 class ZetaDataHandle:
@@ -52,19 +54,21 @@ class ZetaDataHandle:
 
     def digest(self):
         if self.__state == self.STATE_DIGEST_HEADER:
-            if len(self.__buffer) >= 3:
+            if len(self.__buffer) >= 4:
                 self.__current_pkt = ZetaISCCommand(
-                    *unpack_from("u6u2u8u8", self.__buffer[:3], 0))
-                self.__buffer = self.__buffer[3:]
+                    *unpack_from("u6u2u8u8u8", self.__buffer[:4], 0))
+                self.__buffer = self.__buffer[4:]
                 self.__state = self.STATE_DIGEST_BODY
         if self.__state == self.STATE_DIGEST_BODY:
             if len(self.__buffer) == self.__current_pkt.size():
                 if crc8(self.__buffer) == self.__current_pkt.crc8():
                     self.__current_pkt.set_data(self.__buffer)
-                    self.__buffer = self.__buffer[10:]
                     print("Pkt assembled: {}".format(self.__current_pkt))
                     self.__current_pkt = None
                     self.__state = self.STATE_DIGEST_HEADER
+                else:
+                    print("CRC error, pkt discarded")
+                self.__buffer = self.__buffer[self.__current_pkt.size():]
 
 
 zt_data_handler = ZetaDataHandle()
