@@ -1,6 +1,6 @@
 import asyncio
 import serial_asyncio as serial
-from bitstruct import unpack_from
+from bitstruct import unpack_from, pack
 from libscrc import crc8
 
 
@@ -38,21 +38,31 @@ class ZetaISCCommand:
     def data(self):
         return self.__data
 
+    def args(self):
+        return (self.__cmd, self.__type, self.__channel, self.__crc,
+                self.__size)
+
 
 class ZetaDataHandle:
     STATE_DIGEST_HEADER = 0
     STATE_DIGEST_BODY = 1
 
     def __init__(self):
+        self.iqueue = asyncio.Queue()
+        self.oqueue = asyncio.Queue()
         self.__buffer = bytearray()
         self.__state = self.STATE_DIGEST_HEADER
         self.__current_pkt = None
 
-    def append(self, data):
+    async def append(self, data):
         self.__buffer.extend(data)
-        self.digest()
+        await self.digest()
 
-    def digest(self):
+    async def encode_command(self, cmd: ZetaISCCommand):
+        await self.oqueue.put(pack("u6u2u8u8u8", *cmd.args()))
+        await self.oqueue.put(cmd.data())
+
+    async def digest(self):
         if self.__state == self.STATE_DIGEST_HEADER:
             if len(self.__buffer) >= 4:
                 self.__current_pkt = ZetaISCCommand(
@@ -64,38 +74,46 @@ class ZetaDataHandle:
                 if crc8(self.__buffer) == self.__current_pkt.crc8():
                     self.__current_pkt.set_data(self.__buffer)
                     print("Pkt assembled: {}".format(self.__current_pkt))
+                    await self.encode_command(self.__current_pkt)
+
                     self.__current_pkt = None
                     self.__state = self.STATE_DIGEST_HEADER
                 else:
                     print("CRC error, pkt discarded")
-                self.__buffer = self.__buffer[self.__current_pkt.size():]
+                self.__buffer = bytearray()
+                # self.__buffer[self.__current_pkt.size():]
+
+    async def run(self):
+        while (True):
+            data = await self.iqueue.get()
+            await self.append(data)
 
 
-zt_data_handler = ZetaDataHandle()
+async def main(loop):
+    print("Running main task")
+    zt_data_handler = ZetaDataHandle()
+    reader, writer = await serial.open_serial_connection(url='/dev/ttyACM0',
+                                                         baudrate=115200,
+                                                         loop=loop)
+    await asyncio.gather(send(writer, zt_data_handler.oqueue),
+                         recv(reader, zt_data_handler.iqueue),
+                         zt_data_handler.run())
 
 
-class SerialMonitor(asyncio.Protocol):
-    def __init__(self):
-        pass
+async def send(w: asyncio.StreamWriter, oqueue: asyncio.Queue):
+    print("Running send task")
+    while True:
+        data = await oqueue.get()
+        print(f"Data: {data}")
+        w.write(data)
 
-    def connection_made(self, transport):
-        self.transport = transport
-        print('Port opened:', transport)
 
-    def data_received(self, data):
-        # print(str(data), end="")
-        zt_data_handler.append(data)
-
-    def connection_lost(self, exc):
-        print('Port closed')
-        asyncio.get_event_loop().stop()
+async def recv(r, iqueue: asyncio.Queue):
+    print("Running recv task")
+    while True:
+        data = await r.read(1)
+        await iqueue.put(data)
 
 
 loop = asyncio.get_event_loop()
-coro = serial.create_serial_connection(loop,
-                                       SerialMonitor,
-                                       '/dev/ttyACM0',
-                                       baudrate=115200)
-loop.run_until_complete(coro)
-loop.run_forever()
-loop.close()
+loop.run_until_complete(main(loop))

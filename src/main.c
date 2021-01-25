@@ -7,6 +7,7 @@
 #include <sys/printk.h>
 #include <zephyr.h>
 #include <zt_uart.h>
+#include "kernel.h"
 
 #define ZT_ISC_PKT_ASSERT_EQ(actual, expected, ret) \
     if (actual != expected) {                       \
@@ -38,6 +39,7 @@ void main(void)
     h.channel              = 2;
     h.crc                  = crc8(buffer, sizeof(buffer), 0x07, 0x00, 0);
     h.size                 = sizeof(buffer);
+
 
     uart_write((uint8_t *) &h, sizeof(struct zt_isc_header));
     uart_write(buffer, sizeof(buffer));
