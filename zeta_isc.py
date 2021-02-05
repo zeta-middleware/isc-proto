@@ -6,14 +6,15 @@ from libscrc import crc8
 
 class ZetaISCCommand:
     def __init__(self, *args):
-        if len(args) != 5:
+        if len(args) != 4:
             raise ValueError("Arg must have 4 items given {}".format(
                 len(args)))
-        self.__type = args[1]
+        self.__type = args[2]
+        self.__has_data = args[1]
         self.__cmd = args[0]
-        self.__channel = args[2]
-        self.__crc = args[3]
-        self.__size = args[4]
+        self.__channel = args[3]
+        self.__crc = None
+        self.__size = None
         self.__data = None
 
     def __repr__(self):
@@ -25,6 +26,13 @@ class ZetaISCCommand:
              f"    size: {self.__size}\n" + \
              f"    data: {self.__data}\n)"
         return representation
+
+    def add_data_info(self, *args):
+        self.__crc = args[0]
+        self.__size = args[1]
+
+    def has_data(self):
+        return self.__has_data
 
     def size(self):
         return self.__size
@@ -44,14 +52,15 @@ class ZetaISCCommand:
 
 
 class ZetaDataHandle:
-    STATE_DIGEST_HEADER = 0
-    STATE_DIGEST_BODY = 1
+    STATE_DIGEST_HEADER_OP = 0
+    STATE_DIGEST_HEADER_DATA_INFO = 1
+    STATE_DIGEST_BODY = 2
 
     def __init__(self):
         self.iqueue = asyncio.Queue()
         self.oqueue = asyncio.Queue()
         self.__buffer = bytearray()
-        self.__state = self.STATE_DIGEST_HEADER
+        self.__state = self.STATE_DIGEST_HEADER_OP
         self.__current_pkt = None
 
     async def append(self, data):
@@ -63,11 +72,20 @@ class ZetaDataHandle:
         await self.oqueue.put(cmd.data())
 
     async def digest(self):
-        if self.__state == self.STATE_DIGEST_HEADER:
-            if len(self.__buffer) >= 4:
+        if self.__state == self.STATE_DIGEST_HEADER_OP:
+            if len(self.__buffer) >= 2:
                 self.__current_pkt = ZetaISCCommand(
-                    *unpack_from("u6u2u8u8u8", self.__buffer[:4], 0))
-                self.__buffer = self.__buffer[4:]
+                    *unpack_from("u5u1u2u8", self.__buffer[:2], 0))
+                self.__buffer = self.__buffer[2:]
+                if self.__current_pkt.has_data():
+                    self.__state = self.STATE_DIGEST_HEADER_DATA_INFO
+                else:
+                    print("Only a command!")
+        if self.__state == self.STATE_DIGEST_HEADER_DATA_INFO:
+            if len(self.__buffer) >= 2:
+                self.__current_pkt.add_data_info(
+                    *unpack_from("u8u8", self.__buffer[:2], 0))
+                self.__buffer = self.__buffer[2:]
                 self.__state = self.STATE_DIGEST_BODY
         if self.__state == self.STATE_DIGEST_BODY:
             if len(self.__buffer) == self.__current_pkt.size():
@@ -75,11 +93,10 @@ class ZetaDataHandle:
                     self.__current_pkt.set_data(self.__buffer)
                     print("Pkt assembled: {}".format(self.__current_pkt))
                     await self.encode_command(self.__current_pkt)
-
                     self.__current_pkt = None
-                    self.__state = self.STATE_DIGEST_HEADER
                 else:
                     print("CRC error, pkt discarded")
+                self.__state = self.STATE_DIGEST_HEADER_OP
                 self.__buffer = bytearray()
                 # self.__buffer[self.__current_pkt.size():]
 
@@ -104,7 +121,7 @@ async def send(w: asyncio.StreamWriter, oqueue: asyncio.Queue):
     print("Running send task")
     while True:
         data = await oqueue.get()
-        print(f"Data: {data}")
+        print(f"Data to be sent: {data}")
         w.write(data)
 
 
