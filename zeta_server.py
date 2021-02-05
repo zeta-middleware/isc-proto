@@ -38,7 +38,17 @@ def struct_contents_set(struct, raw_data):
          POINTER(c_char * sizeof(struct))).contents.raw = raw_data
 
 
-async def main():
+async def pub_handler():
+    socket = context.socket(zmq.PUB)
+    socket.bind("tcp://*:5556")
+    print("Publisher handler running...")
+    while (True):
+        await asyncio.sleep(5)
+        await socket.send_multipart([b'\x0a', b'banana'])
+        print("Publishing to the topic \x0a")
+
+
+async def response_handler():
     socket = context.socket(zmq.REP)
     req = REQ(1, FLAG_(0, 1, 1, 0), (c_uint8 * 32)(*range(32)))
     print(f"{ctypes.sizeof(req)} bytes: {struct_contents(req)}")
@@ -53,8 +63,12 @@ async def main():
         await asyncio.sleep(1)
 
         #  Send reply back to client
-        await socket.send(struct_contents(req))
+        await socket.send(b"\x02" + struct_contents(req))
         req.id = req.id + 1
+
+
+async def main():
+    await asyncio.gather(pub_handler(), response_handler())
 
 
 asyncio.run(main())

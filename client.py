@@ -37,7 +37,17 @@ def struct_contents_set(struct, raw_data):
          POINTER(c_char * sizeof(struct))).contents.raw = raw_data
 
 
-async def main():
+async def sub_handler():
+    socket = context.socket(zmq.SUB)
+    socket.connect("tcp://localhost:5556")
+    socket.setsockopt(zmq.SUBSCRIBE, b'\x0a')
+    print("Subscriber handler running...")
+    while (True):
+        channel, data = await socket.recv_multipart()
+        print("topic received")
+
+
+async def read_write_handler():
     #  Socket to talk to server
     print("Connecting to hello world server…")
     socket = context.socket(zmq.REQ)
@@ -45,15 +55,18 @@ async def main():
 
     #  Do 10 requests, waiting each time for a response
     req = REQ()
-    for request in range(10):
-        print("Sending request %s …" % request)
-        await socket.send(b"read")
+    for _ in range(10):
+        await socket.send(b"\x01")
 
         #  Get the reply.
         message = await socket.recv()
-        struct_contents_set(req, message)
-        print("Received %s [ %s ]" % (request, struct_contents(req)))
+        struct_contents_set(req, message[1:])
+        print(f"Received {message[0]} [%s]\n" % (struct_contents(req)))
     socket.close()
+
+
+async def main():
+    await asyncio.gather(sub_handler(), read_write_handler())
 
 
 asyncio.run(main())
